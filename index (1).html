@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Solar Energy Meter (Mock kWh)</title>
+
+  <style>
+    :root {
+      --yellow: #f1c40f;
+      --bg: #fefae0;
+      --text-dark: #2c3e50;
+      --muted: #777;
+    }
+
+    body {
+      font-family: "Segoe UI", Arial, sans-serif;
+      background: var(--bg);
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+
+    .meter {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.15);
+      padding: 25px;
+      width: 400px;
+      text-align: center;
+    }
+
+    .pill {
+      background: var(--yellow);
+      color: black;
+      display: inline-block;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 14px;
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+
+    .digital-digits {
+      font-size: 36px;
+      font-weight: bold;
+      color: var(--text-dark);
+      margin-top: 10px;
+    }
+
+    .label {
+      font-weight: bold;
+      color: #555;
+      margin-top: 10px;
+    }
+
+    .value {
+      font-size: 20px;
+      color: #000;
+      margin-top: 4px;
+    }
+
+    .small.muted {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .controls {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .controls button {
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: none;
+      background: var(--yellow);
+      color: black;
+      font-weight: bold;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+
+    .controls button:hover {
+      opacity: 0.85;
+    }
+
+    .controls select {
+      padding: 6px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+    }
+
+    .input-section {
+      margin-top: 15px;
+    }
+
+    .input-section input {
+      width: 100px;
+      padding: 6px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      text-align: center;
+    }
+
+    .input-section button {
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: none;
+      background: var(--yellow);
+      color: black;
+      font-weight: bold;
+      cursor: pointer;
+      margin-left: 8px;
+    }
+
+    .input-section button:hover {
+      opacity: 0.9;
+    }
+  </style>
+</head>
+<body>
+  <div class="meter">
+    <div class="pill">Solar Energy Meter — Mock kWh</div>
+    <div class="small muted">Simulated digital display for demo purposes</div>
+
+    <div class="digital-digits" id="displayPower">0 W</div>
+    <div class="small muted">Current Power (Instant)</div>
+
+    <div class="label">Total Energy</div>
+    <div class="value" id="displayKwh">0.000 kWh</div>
+
+    <!-- New input to set total -->
+    <div class="input-section">
+      <label for="setTotal">Set Total Energy (kWh): </label>
+      <input type="number" id="setTotal" step="0.001" placeholder="e.g. 10.500">
+      <button id="setBtn">Set</button>
+    </div>
+
+    <div class="label">Sim Time</div>
+    <div class="value" id="simTime">00:00:00</div>
+
+    <div class="controls">
+      <button id="connectApiBtn" title="Sync local meter to API">Connect</button>
+      <span id="apiStatus" class="small muted">API: idle</span>
+      <button id="startBtn">Start</button>
+      <button id="pauseBtn" disabled>Pause</button>
+      <button id="resetBtn">Reset</button>
+
+      <select id="speedSelect">
+        <option value="1">1×</option>
+        <option value="10">10×</option>
+        <option value="60">60×</option>
+        <option value="3600">3600×</option>
+      </select>
+    </div>
+  </div>
+
+  <script>
+    // --- MOCK SOLAR ENERGY METER SIMULATION LOGIC ---
+
+    let running = false;
+    let totalEnergy = 0; // kWh
+    let time = 0; // seconds
+    let interval;
+    let tickSpeed = 1000; // ms per tick
+
+    const displayPower = document.getElementById('displayPower');
+    const displayKwh = document.getElementById('displayKwh');
+    const simTime = document.getElementById('simTime');
+    const startBtn = document.getElementById('startBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const speedSelect = document.getElementById('speedSelect');
+    const setTotal = document.getElementById('setTotal');
+    const setBtn = document.getElementById('setBtn');
+    const connectApiBtn = document.getElementById('connectApiBtn');
+    const apiStatus = document.getElementById('apiStatus');
+
+    let apiConnected = false;
+    let pushTimer = null;
+
+    function formatTime(sec) {
+      const h = String(Math.floor(sec / 3600)).padStart(2, '0');
+      const m = String(Math.floor((sec % 3600) / 60)).padStart(2, '0');
+      const s = String(sec % 60).padStart(2, '0');
+      return `${h}:${m}:${s}`;
+    }
+
+    function randomPower() {
+      // simulate solar fluctuation: 100W - 600W
+      return Math.floor(100 + Math.random() * 500);
+    }
+
+    function tick() {
+      const power = randomPower();
+      displayPower.textContent = power + " W";
+      totalEnergy += (power / 1000) * (tickSpeed / 3600000);
+      displayKwh.textContent = totalEnergy.toFixed(3) + " kWh";
+      time++;
+      simTime.textContent = formatTime(time);
+      scheduleApiPush(power);
+    }
+
+    startBtn.addEventListener('click', () => {
+      if (!running) {
+        running = true;
+        pauseBtn.disabled = false;
+        startBtn.disabled = true;
+        interval = setInterval(tick, tickSpeed);
+      }
+    });
+
+    pauseBtn.addEventListener('click', () => {
+      if (running) {
+        running = false;
+        clearInterval(interval);
+        pauseBtn.disabled = true;
+        startBtn.disabled = false;
+      }
+    });
+
+    resetBtn.addEventListener('click', () => {
+      running = false;
+      clearInterval(interval);
+      totalEnergy = 0;
+      time = 0;
+      displayPower.textContent = "0 W";
+      displayKwh.textContent = "0.000 kWh";
+      simTime.textContent = "00:00:00";
+      startBtn.disabled = false;
+      pauseBtn.disabled = true;
+      scheduleApiPush(0);
+    });
+
+    speedSelect.addEventListener('change', () => {
+      tickSpeed = 1000 / parseInt(speedSelect.value);
+      if (running) {
+        clearInterval(interval);
+        interval = setInterval(tick, tickSpeed);
+      }
+    });
+
+    // --- Set total energy manually ---
+    setBtn.addEventListener('click', () => {
+      const val = parseFloat(setTotal.value);
+      if (!isNaN(val) && val >= 0) {
+        totalEnergy = val;
+        displayKwh.textContent = totalEnergy.toFixed(3) + " kWh";
+        scheduleApiPush(undefined);
+      }
+    });
+
+    // ---- Push local meter updates to API (debounced) ----
+    async function pushMeterUpdate(currentPowerOverride) {
+      if (!apiConnected) return;
+      try {
+        apiStatus.textContent = `API: syncing...`;
+        const body = {
+          total_energy_kwh: Number(totalEnergy.toFixed(3))
+        };
+        const resp = await fetch(`/meter/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        if (!resp.ok) {
+          const msg = await resp.text();
+          throw new Error(msg || `HTTP ${resp.status}`);
+        }
+        apiStatus.textContent = `API: synced`;
+      } catch (e) {
+        apiStatus.textContent = `API error: ${(e && e.message) || e}`;
+      }
+    }
+
+    function scheduleApiPush(currentPowerOverride) {
+      if (!apiConnected) return;
+      if (pushTimer) clearTimeout(pushTimer);
+      pushTimer = setTimeout(() => pushMeterUpdate(currentPowerOverride), 400);
+    }
+
+    connectApiBtn.addEventListener('click', () => {
+      apiConnected = true;
+      apiStatus.textContent = `API: connected`;
+      pushMeterUpdate();
+    });
+  </script>
+</body>
+</html>
